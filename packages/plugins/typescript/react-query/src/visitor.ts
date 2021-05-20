@@ -3,6 +3,7 @@ import {
   ClientSideBasePluginConfig,
   LoadedFragment,
   DocumentMode,
+  getConfigValue,
 } from '@graphql-codegen/visitor-plugin-common';
 import { ReactQueryRawPluginConfig } from './config';
 import autoBind from 'auto-bind';
@@ -13,9 +14,14 @@ import { FetchFetcher } from './fetcher-fetch';
 import { HardcodedFetchFetcher } from './fetcher-fetch-hardcoded';
 import { GraphQLRequestClientFetcher } from './fetcher-graphql-request';
 import { CustomMapperFetcher } from './fetcher-custom-mapper';
-import { pascalCase } from 'pascal-case';
+import { pascalCase } from 'change-case-all';
+import { generateQueryKeyMaker } from './variables-generator';
 
-export interface ReactQueryPluginConfig extends ClientSideBasePluginConfig {}
+export interface ReactQueryPluginConfig extends ClientSideBasePluginConfig {
+  errorType: string;
+  exposeDocument: boolean;
+  exposeQueryKeys: boolean;
+}
 
 export interface ReactQueryMethodMap {
   query: {
@@ -52,6 +58,9 @@ export class ReactQueryVisitor extends ClientSideBaseVisitor<ReactQueryRawPlugin
   ) {
     super(schema, fragments, rawConfig, {
       documentMode: DocumentMode.string,
+      errorType: getConfigValue(rawConfig.errorType, 'unknown'),
+      exposeDocument: getConfigValue(rawConfig.exposeDocument, false),
+      exposeQueryKeys: getConfigValue(rawConfig.exposeQueryKeys, false),
     });
     this._externalImportPrefix = this.config.importOperationTypesFrom ? `${this.config.importOperationTypesFrom}.` : '';
     this._documents = documents;
@@ -67,20 +76,23 @@ export class ReactQueryVisitor extends ClientSideBaseVisitor<ReactQueryRawPlugin
   private createFetcher(raw: ReactQueryRawPluginConfig['fetcher']): FetcherRenderer {
     if (raw === 'fetch') {
       return new FetchFetcher(this);
-    } else if (typeof raw === 'object' && raw.endpoint) {
+    } else if (typeof raw === 'object' && 'endpoint' in raw) {
       return new HardcodedFetchFetcher(this, raw);
     } else if (raw === 'graphql-request') {
       return new GraphQLRequestClientFetcher(this);
     }
 
-    return new CustomMapperFetcher(this, raw as string);
+    return new CustomMapperFetcher(this, raw);
+  }
+
+  public get hasOperations() {
+    return this._collectedOperations.length > 0;
   }
 
   public getImports(): string[] {
     const baseImports = super.getImports();
-    const hasOperations = this._collectedOperations.length > 0;
 
-    if (!hasOperations) {
+    if (!this.hasOperations) {
       return baseImports;
     }
 
@@ -108,7 +120,7 @@ export class ReactQueryVisitor extends ClientSideBaseVisitor<ReactQueryRawPlugin
     operationVariablesTypes = this._externalImportPrefix + operationVariablesTypes;
 
     if (operationType === 'Query') {
-      return this.fetcher.generateQueryHook(
+      let query = this.fetcher.generateQueryHook(
         node,
         documentVariableName,
         operationName,
@@ -116,6 +128,13 @@ export class ReactQueryVisitor extends ClientSideBaseVisitor<ReactQueryRawPlugin
         operationVariablesTypes,
         hasRequiredVariables
       );
+      if (this.config.exposeDocument) {
+        query += `\nuse${operationName}.document = ${documentVariableName};\n`;
+      }
+      if (this.config.exposeQueryKeys) {
+        query += generateQueryKeyMaker(node, operationName, operationVariablesTypes, hasRequiredVariables);
+      }
+      return query;
     } else if (operationType === 'Mutation') {
       return this.fetcher.generateMutationHook(
         node,

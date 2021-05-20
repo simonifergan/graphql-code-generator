@@ -19,6 +19,7 @@ import { TypeScriptOperationVariablesToObject } from './ts-operation-variables-t
 import { TypeScriptSelectionSetProcessor } from './ts-selection-set-processor';
 
 export interface TypeScriptDocumentsParsedConfig extends ParsedDocumentsConfig {
+  arrayInputCoercion: boolean;
   avoidOptionals: AvoidOptionalsConfig;
   immutableTypes: boolean;
   noExport: boolean;
@@ -32,6 +33,7 @@ export class TypeScriptDocumentsVisitor extends BaseDocumentsVisitor<
     super(
       config,
       {
+        arrayInputCoercion: getConfigValue(config.arrayInputCoercion, true),
         noExport: getConfigValue(config.noExport, false),
         avoidOptionals: normalizeAvoidOptionals(getConfigValue(config.avoidOptionals, false)),
         immutableTypes: getConfigValue(config.immutableTypes, false),
@@ -51,8 +53,12 @@ export class TypeScriptDocumentsVisitor extends BaseDocumentsVisitor<
       return `${listModifier}<${type}>`;
     };
 
-    const formatNamedField = (name: string, type: GraphQLOutputType | GraphQLNamedType | null): string => {
-      const optional = !this.config.avoidOptionals.field && !!type && !isNonNullType(type);
+    const formatNamedField = (
+      name: string,
+      type: GraphQLOutputType | GraphQLNamedType | null,
+      isConditional = false
+    ): string => {
+      const optional = isConditional || (!this.config.avoidOptionals.field && !!type && !isNonNullType(type));
       return (this.config.immutableTypes ? `readonly ${name}` : name) + (optional ? '?' : '');
     };
 
@@ -92,7 +98,7 @@ export class TypeScriptDocumentsVisitor extends BaseDocumentsVisitor<
         enumsNames,
         this.config.enumPrefix,
         this.config.enumValues,
-        true
+        this.config.arrayInputCoercion
       )
     );
     this._declarationBlockConfig = {

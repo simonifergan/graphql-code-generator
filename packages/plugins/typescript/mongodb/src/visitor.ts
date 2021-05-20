@@ -5,8 +5,7 @@ import {
   getConfigValue,
   ParsedConfig,
   BaseVisitor,
-  buildScalars,
-  DEFAULT_SCALARS,
+  buildScalarsFromConfig,
 } from '@graphql-codegen/visitor-plugin-common';
 import autoBind from 'auto-bind';
 import { Directives, TypeScriptMongoPluginConfig } from './config';
@@ -64,7 +63,7 @@ export class TsMongoVisitor extends BaseVisitor<TypeScriptMongoPluginConfig, Typ
       idFieldName: pluginConfig.idFieldName || '_id',
       enumsAsString: getConfigValue<boolean>(pluginConfig.enumsAsString, true),
       avoidOptionals: getConfigValue<boolean>(pluginConfig.avoidOptionals, false),
-      scalars: buildScalars(_schema, pluginConfig.scalars, DEFAULT_SCALARS),
+      scalars: buildScalarsFromConfig(_schema, pluginConfig),
     } as Partial<TypeScriptMongoPluginParsedConfig>) as any);
     autoBind(this);
   }
@@ -241,12 +240,14 @@ export class TsMongoVisitor extends BaseVisitor<TypeScriptMongoPluginConfig, Typ
   }
 
   private _addAdditionalFields(tree: FieldsTree, additioalFields: AdditionalField[] | null): void {
+    const avoidOptionals = this.config.avoidOptionals;
     if (!additioalFields || additioalFields.length === 0) {
       return;
     }
 
     for (const field of additioalFields) {
-      tree.addField(field.path, field.type);
+      const isOptional = field.path.includes('?');
+      tree.addField(`${isOptional && avoidOptionals ? field.path.replace(/\?/g, '') : field.path}`, field.type);
     }
   }
 

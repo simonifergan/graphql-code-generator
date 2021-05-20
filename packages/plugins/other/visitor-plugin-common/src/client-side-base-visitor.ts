@@ -12,13 +12,14 @@ import {
 import { DepGraph } from 'dependency-graph';
 import gqlTag from 'graphql-tag';
 import { Types } from '@graphql-codegen/plugin-helpers';
-import { getConfigValue, buildScalars } from './utils';
+import { getConfigValue, buildScalarsFromConfig } from './utils';
 import { LoadedFragment, ParsedImport } from './types';
 import { basename, extname } from 'path';
-import { DEFAULT_SCALARS } from './scalars';
-import { pascalCase } from 'pascal-case';
+import { pascalCase } from 'change-case-all';
 import { generateFragmentImportStatement } from './imports';
 import { optimizeDocumentNode } from '@graphql-tools/optimize';
+
+gqlTag.enableExperimentalFragmentVariables();
 
 export enum DocumentMode {
   graphQLTag = 'graphQLTag',
@@ -108,6 +109,9 @@ export interface RawClientSideBasePluginConfig extends RawConfig {
    * - `documentNode`: document nodes will be generated as objects when we generate the templates.
    * - `documentNodeImportFragments`: Similar to documentNode except it imports external fragments instead of embedding them.
    * - `external`: document nodes are imported from an external file. To be used with `importDocumentNodeExternallyFrom`
+   *
+   * Note that some plugins (like `typescript-graphql-request`) also supports `string` for this parameter.
+   *
    */
   documentMode?: DocumentMode;
   /**
@@ -148,6 +152,11 @@ export interface RawClientSideBasePluginConfig extends RawConfig {
    * @description This config adds PURE magic comment to the static variables to enforce treeshaking for your bundler.
    */
   pureMagicComment?: boolean;
+  /**
+   * @default false
+   * @description If set to true, it will enable support for parsing variables on fragments.
+   */
+  experimentalFragmentVariables?: boolean;
 }
 
 export interface ClientSideBasePluginConfig extends ParsedConfig {
@@ -167,6 +176,7 @@ export interface ClientSideBasePluginConfig extends ParsedConfig {
   globalNamespace?: boolean;
   pureMagicComment?: boolean;
   optimizeDocumentNode: boolean;
+  experimentalFragmentVariables?: boolean;
 }
 
 export class ClientSideBaseVisitor<
@@ -186,7 +196,7 @@ export class ClientSideBaseVisitor<
     documents?: Types.DocumentFile[]
   ) {
     super(rawConfig, {
-      scalars: buildScalars(_schema, rawConfig.scalars, DEFAULT_SCALARS),
+      scalars: buildScalarsFromConfig(_schema, rawConfig),
       dedupeOperationSuffix: getConfigValue(rawConfig.dedupeOperationSuffix, false),
       optimizeDocumentNode: getConfigValue(rawConfig.optimizeDocumentNode, true),
       omitOperationSuffix: getConfigValue(rawConfig.omitOperationSuffix, false),
@@ -207,6 +217,7 @@ export class ClientSideBaseVisitor<
       })(rawConfig),
       importDocumentNodeExternallyFrom: getConfigValue(rawConfig.importDocumentNodeExternallyFrom, ''),
       pureMagicComment: getConfigValue(rawConfig.pureMagicComment, false),
+      experimentalFragmentVariables: getConfigValue(rawConfig.experimentalFragmentVariables, false),
       ...additionalConfig,
     } as any);
 
@@ -322,13 +333,21 @@ export class ClientSideBaseVisitor<
 
   protected _generateFragment(fragmentDocument: FragmentDefinitionNode): string | void {
     const name = this.getFragmentVariableName(fragmentDocument);
-    const fragmentResultType = this.convertName(fragmentDocument.name.value, {
-      useTypesPrefix: true,
-      suffix: this.getFragmentSuffix(fragmentDocument),
-    });
-    return `export const ${name}${this.getDocumentNodeSignature(fragmentResultType, 'unknown', fragmentDocument)} =${
-      this.config.pureMagicComment ? ' /*#__PURE__*/' : ''
-    } ${this._gql(fragmentDocument)};`;
+    const fragmentTypeSuffix = this.getFragmentSuffix(fragmentDocument);
+    return `export const ${name} =${this.config.pureMagicComment ? ' /*#__PURE__*/' : ''} ${this._gql(
+      fragmentDocument
+    )}${this.getDocumentNodeSignature(
+      this.convertName(fragmentDocument.name.value, {
+        useTypesPrefix: true,
+        suffix: fragmentTypeSuffix,
+      }),
+      this.config.experimentalFragmentVariables
+        ? this.convertName(fragmentDocument.name.value, {
+            suffix: fragmentTypeSuffix + 'Variables',
+          })
+        : 'unknown',
+      fragmentDocument
+    )};`;
   }
 
   private get fragmentsGraph(): DepGraph<LoadedFragment> {
@@ -510,7 +529,7 @@ export class ClientSideBaseVisitor<
       this.config.documentMode === DocumentMode.documentNode ||
       this.config.documentMode === DocumentMode.documentNodeImportFragments
     ) {
-      return `: DocumentNode`;
+      return ` as unknown as DocumentNode`;
     }
 
     return '';
@@ -554,13 +573,9 @@ export class ClientSideBaseVisitor<
     if (this.config.documentMode !== DocumentMode.external) {
       // only generate exports for named queries
       if (documentVariableName !== '') {
-        documentString = `${
-          this.config.noExport ? '' : 'export'
-        } const ${documentVariableName}${this.getDocumentNodeSignature(
-          operationResultType,
-          operationVariablesTypes,
-          node
-        )} =${this.config.pureMagicComment ? ' /*#__PURE__*/' : ''} ${this._gql(node)};`;
+        documentString = `${this.config.noExport ? '' : 'export'} const ${documentVariableName} =${
+          this.config.pureMagicComment ? ' /*#__PURE__*/' : ''
+        } ${this._gql(node)}${this.getDocumentNodeSignature(operationResultType, operationVariablesTypes, node)};`;
       }
     }
 

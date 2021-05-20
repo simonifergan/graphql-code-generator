@@ -1,5 +1,48 @@
 # @graphql-codegen/typescript-operations
 
+## 1.17.16
+
+### Patch Changes
+
+- d9212aa0: fix(visitor-plugin-common): guard for a runtime type error
+- Updated dependencies [d9212aa0]
+- Updated dependencies [f0b5ea53]
+- Updated dependencies [097bea2f]
+  - @graphql-codegen/visitor-plugin-common@1.20.0
+  - @graphql-codegen/typescript@1.22.0
+  - @graphql-codegen/plugin-helpers@1.18.5
+
+## 1.17.15
+
+### Patch Changes
+
+- 1f6f3db6: Fix for @skip @include directives upon arrays
+- 29b75b1e: enhance(namingConvention): use change-case-all instead of individual packages for naming convention
+- Updated dependencies [e947f8e3]
+- Updated dependencies [29b75b1e]
+- Updated dependencies [d4942d04]
+- Updated dependencies [1f6f3db6]
+- Updated dependencies [29b75b1e]
+  - @graphql-codegen/visitor-plugin-common@1.19.0
+  - @graphql-codegen/typescript@1.21.1
+  - @graphql-codegen/plugin-helpers@1.18.3
+
+## 1.17.14
+
+### Patch Changes
+
+- 63be0f40: Fix issues with empty interfaces causing syntax issues
+- 190482a1: add support for fragment variables
+- 142b32b3: @skip, @include directives resolve to optional fields
+- 142b32b3: Better support for @skip/@include directives with complex selection sets
+- Updated dependencies [63be0f40]
+- Updated dependencies [190482a1]
+- Updated dependencies [4444348d]
+- Updated dependencies [142b32b3]
+- Updated dependencies [42213fa0]
+  - @graphql-codegen/visitor-plugin-common@1.18.1
+  - @graphql-codegen/typescript@1.20.1
+
 ## 1.17.13
 
 ### Patch Changes

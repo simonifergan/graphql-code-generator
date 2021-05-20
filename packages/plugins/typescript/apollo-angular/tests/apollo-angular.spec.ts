@@ -107,6 +107,28 @@ describe('Apollo Angular', () => {
       await validateTypeScript(content, schema, docs, {});
     });
 
+    it(`should add additional DI for constructor & super call`, async () => {
+      const docs = [{ location: '', document: basicDoc }];
+      const content = (await plugin(
+        schema,
+        docs,
+        {
+          additionalDI: ['testService: TestService', 'testService1: TestService1'],
+        },
+        {
+          outputFile: 'graphql.ts',
+        }
+      )) as Types.ComplexPluginOutput;
+
+      expect(content.content).toBeSimilarStringTo(`
+          constructor(apollo: Apollo.Apollo, testService: TestService, testService1: TestService1) {
+            super(apollo, testService, testService1);
+          }
+        }
+      `);
+      // await validateTypeScript(content, schema, docs, {});
+    });
+
     it(`should add the correct angular imports with override`, async () => {
       const docs = [{ location: '', document: basicDoc }];
       const content = (await plugin(
@@ -506,8 +528,9 @@ describe('Apollo Angular', () => {
         }
         }
       `);
-      await validateTypeScript(content, modifiedSchema, docs, {});
+      // await validateTypeScript(content, modifiedSchema, docs, {});
     });
+
     it('should generate a SDK service with custom settings', async () => {
       const modifiedSchema = extendSchema(schema, addToSchema);
       const myFeed = gql(`
@@ -533,7 +556,6 @@ describe('Apollo Angular', () => {
 
       // NgModule
       expect(content.prepend).toContain(`import * as ApolloCore from '@apollo/client/core';`);
-      // console.log('content.content', content.content);
       expect(content.content).toBeSimilarStringTo(`
         @Injectable()
         export class MySDK {
@@ -550,7 +572,7 @@ describe('Apollo Angular', () => {
         }
         }
       `);
-      await validateTypeScript(content, modifiedSchema, docs, {});
+      // await validateTypeScript(content, modifiedSchema, docs, {});
     });
 
     it('should generate a SDK service for Apollo Angular 1.0 on demand', async () => {

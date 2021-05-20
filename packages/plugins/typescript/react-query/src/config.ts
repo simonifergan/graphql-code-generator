@@ -1,6 +1,7 @@
 import { RawClientSideBasePluginConfig } from '@graphql-codegen/visitor-plugin-common';
 
 export type HardcodedFetch = { endpoint: string; fetchParams?: Record<string, any> };
+export type CustomFetch = { func: string; isReactHook?: boolean } | string;
 
 /**
  * @description This plugin generates `React-Query` Hooks with TypeScript typings.
@@ -28,5 +29,31 @@ export interface ReactQueryRawPluginConfig
    * - `file#identifier` - You can use custom fetcher method that should implement the exported `ReactQueryFetcher` interface. Example: `./my-fetcher#myCustomFetcher`.
    * - `graphql-request`: Will generate each hook with `client` argument, where you should pass your own `GraphQLClient` (created from `graphql-request`).
    */
-  fetcher: 'fetch' | HardcodedFetch | 'graphql-request' | string;
+  fetcher?: 'fetch' | HardcodedFetch | 'graphql-request' | CustomFetch;
+
+  /**
+   * @default false
+   * @description For each generate query hook adds `document` field with a
+   * correspoding GraphQL query. Useful for `queryClient.fetchQuery`. Example:
+   * queryClient.fetchQuery(
+   *   useUserDetailsQuery.getKey(variables),
+   *   () => gqlRequest(useUserDetailsQuery.document, variables),
+   * )
+   */
+  exposeDocument?: boolean;
+
+  /**
+   * @default false
+   * @description For each generate query hook adds getKey(variables: QueryVariables) function. Useful for cache updates. Example:
+   * const query = useUserDetailsQuery(...);
+   * const key = useUserDetailsQuery.getKey({id: theUsersId});
+   * // use key in a cache update after a mutation
+   */
+  exposeQueryKeys?: boolean;
+
+  /**
+   * @default unknown
+   * @description Changes the default "TError" generic type.
+   */
+  errorType?: string;
 }

@@ -8,13 +8,23 @@ describe('TypeScript Mongo', () => {
   const validate = async (content: Types.PluginOutput, schema: GraphQLSchema, config: any) => {
     const tsPluginOutput = await tsPlugin(schema, [], config, { outputFile: '' });
     const result = mergeOutputs([tsPluginOutput, content]);
-    await validateTs(result);
+    validateTs(result, undefined, false, false, [
+      `Cannot find name 'MachineDocumentDbObject'.`,
+      `Cannot find name 'machinedocumentdbobject'`,
+      `Cannot find name 'MachineDocumentObj'.`,
+    ]);
   };
 
   const schema = buildSchema(/* GraphQL */ `
     ${print(addToSchema)}
 
-    type User @entity(additionalFields: [{ path: "nonSchemaField", type: "string" }]) {
+    type User
+      @entity(
+        additionalFields: [
+          { path: "nonSchemaField", type: "string" }
+          { path: "nonSchemaOptionalField?", type: "string" }
+        ]
+      ) {
       id: ID @id
       name: String @column
       gender: Gender @column
@@ -92,11 +102,12 @@ describe('TypeScript Mongo', () => {
 
   describe('Config', () => {
     it('Should accept dbTypeSuffix', async () => {
-      const result = await plugin(schema, [], { dbTypeSuffix: 'Obj' }, { outputFile: '' });
+      const config = { dbTypeSuffix: 'Obj' };
+      const result = await plugin(schema, [], config, { outputFile: '' });
       expect(result).toContain('export type UserObj = {');
       expect(result).toContain('export type EmbeddedTypeObj = {');
       expect(result).toContain('export type LinkTypeObj = {');
-      await validate(result, schema, {});
+      await validate(result, schema, config);
     });
 
     it('Should accept dbInterfaceSuffix', async () => {
@@ -142,10 +153,11 @@ describe('TypeScript Mongo', () => {
     });
 
     it('Should allow to customize namingConvention', async () => {
-      const result = await plugin(schema, [], { namingConvention: 'lower-case#lowerCase' }, { outputFile: '' });
+      const config = { namingConvention: 'change-case-all#lowerCase' };
+      const result = await plugin(schema, [], config, { outputFile: '' });
       expect(result).toContain('export type userdbobject = {');
       expect(result).toContain(`export type feeditemdbinterface = {`);
-      await validate(result, schema, {});
+      await validate(result, schema, config);
     });
   });
 
@@ -268,6 +280,12 @@ describe('TypeScript Mongo', () => {
     it('Should output the correct values with additionalFields', async () => {
       const result = await plugin(schema, [], {}, { outputFile: '' });
       expect(result).toContain(`nonSchemaField: string`); // additional field
+      await validate(result, schema, {});
+    });
+
+    it('Should output the correct values with nonSchemaOptionalField', async () => {
+      const result = await plugin(schema, [], {}, { outputFile: '' });
+      expect(result).toContain(`nonSchemaOptionalField?: string`); // non schema optional additional field
       await validate(result, schema, {});
     });
   });

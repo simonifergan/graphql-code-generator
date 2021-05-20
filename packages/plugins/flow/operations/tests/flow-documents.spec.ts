@@ -102,7 +102,7 @@ describe('Flow Operations Plugin', () => {
               document: ast,
             },
           ],
-          { namingConvention: 'lower-case#lowerCase' },
+          { namingConvention: 'change-case-all#lowerCase' },
           { outputFile: '' }
         ),
       ]);
@@ -154,7 +154,7 @@ describe('Flow Operations Plugin', () => {
               document: ast,
             },
           ],
-          { typesPrefix: 'i', namingConvention: 'lower-case#lowerCase' },
+          { typesPrefix: 'i', namingConvention: 'change-case-all#lowerCase' },
           { outputFile: '' }
         ),
       ]);
@@ -1220,17 +1220,27 @@ describe('Flow Operations Plugin', () => {
 
         type User {
           id: String!
-          name: String
-          address: String!
+          name: String!
+          address: Address!
+          friends: [User!]!
+        }
+
+        type Address {
+          city: String!
         }
       `);
 
       const ast = parse(/* GraphQL */ `
-        query user($showAddress: Boolean!) {
+        query user($showAddress: Boolean!, $showName: Boolean!) {
           user {
             id
-            name
-            address @include(if: $showAddress)
+            name @include(if: $showName)
+            address @include(if: $showAddress) {
+              city
+            }
+            friends @include(if: $isFriendly) {
+              id
+            }
           }
         }
       `);
@@ -1251,9 +1261,68 @@ describe('Flow Operations Plugin', () => {
       expect(result).toBeSimilarStringTo(`
       export type UserQueryVariables = {
         showAddress: $ElementType<Scalars, 'Boolean'>,
+        showName: $ElementType<Scalars, 'Boolean'>,
       };
+      export type UserQuery = { user: ({
+            ...$MakeOptional<$Pick<User, { id: *, name: * }>, { name: * }>,
+          ...{ address?: ?$Pick<Address, { city: * }>, friends?: ?Array<$Pick<User, { id: * }>> }
+        }) };
+      `);
 
-      export type UserQuery = { user: $MakeOptional<$Pick<User, { id: *, name?: *, address: * }>, { address: * }> };
+      validateFlow(result);
+    });
+
+    it('@skip, @include should resolve to optional on preResolveTypes', async () => {
+      const schema1 = buildSchema(/* GraphQL */ `
+        type Query {
+          user: User!
+        }
+        type User {
+          id: String!
+          name: String!
+          address: Address!
+          friends: [User!]!
+        }
+        type Address {
+          city: String!
+        }
+      `);
+
+      const ast = parse(/* GraphQL */ `
+        query user($showAddress: Boolean!, $showName: Boolean!) {
+          user {
+            id
+            name @include(if: $showName)
+            address @include(if: $showAddress) {
+              city
+            }
+            friends @include(if: $isFriendly) {
+              id
+            }
+          }
+        }
+      `);
+
+      const result = mergeOutputs([
+        await plugin(
+          schema1,
+          [
+            {
+              location: '',
+              document: ast,
+            },
+          ],
+          { preResolveTypes: true },
+          { outputFile: '' }
+        ),
+      ]);
+
+      expect(result).toBeSimilarStringTo(`
+      export type UserQueryVariables = {
+        showAddress: $ElementType<Scalars, 'Boolean'>,
+        showName: $ElementType<Scalars, 'Boolean'>,
+      };
+      export type UserQuery = { __typename?: 'Query', user: { __typename?: 'User', id: string, name?: ?string, address?: ?{ __typename?: 'Address', city: string }, friends?: ?Array<{ __typename?: 'User', id: string }> } };
       `);
 
       validateFlow(result);

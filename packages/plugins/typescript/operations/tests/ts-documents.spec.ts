@@ -10,6 +10,10 @@ describe('TypeScript Operations Plugin', () => {
   const schema = buildSchema(/* GraphQL */ `
     scalar DateTime
 
+    input InputType {
+      t: String
+    }
+
     type User {
       id: ID!
       username: String!
@@ -90,10 +94,10 @@ describe('TypeScript Operations Plugin', () => {
     config: any = {},
     pluginSchema = schema,
     usage = '',
-    openPlayground = false
+    suspenseErrors = []
   ) => {
     const m = mergeOutputs([await tsPlugin(pluginSchema, [], config, { outputFile: '' }), content, usage]);
-    await validateTs(m, null, null, null, openPlayground);
+    validateTs(m, undefined, undefined, undefined, suspenseErrors);
 
     return m;
   };
@@ -173,7 +177,7 @@ describe('TypeScript Operations Plugin', () => {
           )> }
         );
       `);
-      await validate(content, config);
+      await validate(content, config, schema, '', [`Cannot find namespace 'Types'.`]);
     });
 
     it('Should handle "namespacedImportName" and "preResolveTypes" together', async () => {
@@ -215,7 +219,7 @@ describe('TypeScript Operations Plugin', () => {
         `export type TestQuery = { __typename?: 'Query', f?: Types.Maybe<Types.E>, user: { __typename?: 'User', id: string, f?: Types.Maybe<Types.E>, j?: Types.Maybe<any> } };`
       );
 
-      await validate(content, config);
+      await validate(content, config, schema, '', [`Cannot find namespace 'Types'.`]);
     });
 
     it('Should generate the correct output when using immutableTypes config', async () => {
@@ -237,7 +241,7 @@ describe('TypeScript Operations Plugin', () => {
           }
         }
       `);
-      const config = { namingConvention: 'lower-case#lowerCase', immutableTypes: true };
+      const config = { namingConvention: 'change-case-all#lowerCase', immutableTypes: true };
       const { content } = await plugin(schema, [{ location: 'test-file.ts', document: ast }], config, {
         outputFile: '',
       });
@@ -259,6 +263,22 @@ describe('TypeScript Operations Plugin', () => {
         );
       `);
       await validate(content, config);
+    });
+
+    it('should include fragment variable definitions when experimentalFragmentVariables is set', async () => {
+      const ast = parse(
+        /* GraphQL */ `
+          fragment TextNotificationFragment($skip: Boolean!) on TextNotification {
+            text @skip(if: $skip)
+          }
+        `,
+        { experimentalFragmentVariables: true }
+      );
+      const config = { experimentalFragmentVariables: true };
+      const { content } = await plugin(schema, [{ location: 'test-file.ts', document: ast }], config, {
+        outputFile: '',
+      });
+      expect(content).toMatchSnapshot();
     });
   });
 
@@ -361,7 +381,7 @@ describe('TypeScript Operations Plugin', () => {
           }
         }
       `);
-      const config = { namingConvention: 'lower-case#lowerCase' };
+      const config = { namingConvention: 'change-case-all#lowerCase' };
       const { content } = await plugin(schema, [{ location: 'test-file.ts', document: ast }], config, {
         outputFile: '',
       });
@@ -405,7 +425,7 @@ describe('TypeScript Operations Plugin', () => {
         }
       `);
 
-      const config = { typesPrefix: 'i', namingConvention: 'lower-case#lowerCase' };
+      const config = { typesPrefix: 'i', namingConvention: 'change-case-all#lowerCase' };
       const { content } = await plugin(schema, [{ location: 'test-file.ts', document: ast }], config, {
         outputFile: '',
       });
@@ -1079,7 +1099,7 @@ describe('TypeScript Operations Plugin', () => {
       });
       expect(content).toBeSimilarStringTo(`
         export type UnionTestQuery = (
-          { __typename?: 'Query' } 
+          { __typename?: 'Query' }
           & { unionTest?: Maybe<(
             { __typename?: 'User' }
             & Pick<User, 'id'>
@@ -1834,7 +1854,7 @@ describe('TypeScript Operations Plugin', () => {
         ) }
       );
       `);
-      await validate(content, config);
+      await validate(content, config, schema);
     });
 
     it('Should generate the correct intersection for fragments when using with interfaces with same type', async () => {
@@ -1888,12 +1908,12 @@ describe('TypeScript Operations Plugin', () => {
           & BFragment
         ) | { __typename?: 'B' }> }
       );
-  
+
         export type AFragment = (
           { __typename?: 'A' }
           & Pick<A, 'id'>
         );
-  
+
         export type BFragment = (
           { __typename?: 'A' }
           & Pick<A, 'x'>
@@ -2440,7 +2460,7 @@ describe('TypeScript Operations Plugin', () => {
           innerRequired: Array<Scalars['String']> | Scalars['String'];
         }>;`
       );
-      await validate(content, config);
+      await validate(content, config, schema);
     });
 
     it('Should handle operation variables correctly when they use custom scalars', async () => {
@@ -3175,7 +3195,7 @@ describe('TypeScript Operations Plugin', () => {
 
       expect(content).toBeSimilarStringTo(`
         export type UserQuery = (
-          { __typename?: 'Query' } 
+          { __typename?: 'Query' }
           & { user?: Maybe<(
             { __typename?: 'User' }
             & Pick<User, 'id' | 'login'>
@@ -3433,14 +3453,14 @@ describe('TypeScript Operations Plugin', () => {
         { __typename?: 'AdditionalInfo' }
         & Pick<AdditionalInfo, 'message'>
       );
-  
+
       type UserResult1_User_Fragment = (
         { __typename?: 'User' }
         & Pick<User, 'id'>
       );
-  
+
       type UserResult1_Error2_Fragment = { __typename?: 'Error2' };
-  
+
       type UserResult1_Error3_Fragment = (
         { __typename?: 'Error3' }
         & { info?: Maybe<(
@@ -3448,21 +3468,21 @@ describe('TypeScript Operations Plugin', () => {
           & Pick<AdditionalInfo, 'message2'>
         )> }
       );
-  
+
       export type UserResult1Fragment = UserResult1_User_Fragment | UserResult1_Error2_Fragment | UserResult1_Error3_Fragment;
-  
+
       type UserResult_User_Fragment = (
         { __typename?: 'User' }
         & Pick<User, 'id'>
       );
-  
+
       type UserResult_Error2_Fragment = (
         { __typename?: 'Error2' }
         & Pick<Error2, 'message'>
       );
-  
+
       type UserResult_Error3_Fragment = { __typename?: 'Error3' };
-  
+
       export type UserResultFragment = UserResult_User_Fragment | UserResult_Error2_Fragment | UserResult_Error3_Fragment;`);
     });
 
@@ -3751,7 +3771,7 @@ describe('TypeScript Operations Plugin', () => {
           & Pick<User, 'id'>
         ) }
       );
-      
+
       export type UserLoginQueryQueryVariables = Exact<{ [key: string]: never; }>;
 
       export type UserLoginQueryQuery = (
@@ -3761,7 +3781,7 @@ describe('TypeScript Operations Plugin', () => {
           & Pick<User, 'login'>
         ) }
       );
-      
+
       export declare const UserIdQuery: import("graphql").DocumentNode;
       export declare const UserLoginQuery: import("graphql").DocumentNode;
       `);
@@ -3903,6 +3923,102 @@ describe('TypeScript Operations Plugin', () => {
   });
 
   describe('Issues', () => {
+    it('#4212 - Should merge TS arrays in a more elegant way', async () => {
+      const testSchema = buildSchema(/* GraphQL */ `
+        type Item {
+          id: ID!
+          name: String!
+        }
+
+        type Object {
+          items: [Item!]!
+        }
+
+        type Query {
+          obj: Object
+        }
+      `);
+
+      const query = parse(/* GraphQL */ `
+        fragment Object1 on Object {
+          items {
+            id
+          }
+        }
+
+        fragment Object2 on Object {
+          items {
+            name
+          }
+        }
+
+        fragment CombinedObject on Object {
+          ...Object1
+          ...Object2
+        }
+
+        query test {
+          obj {
+            ...CombinedObject
+          }
+        }
+      `);
+
+      const { content } = await plugin(
+        testSchema,
+        [{ location: '', document: query }],
+        {},
+        {
+          outputFile: 'graphql.ts',
+        }
+      );
+
+      await validate(
+        content,
+        {},
+        testSchema,
+        `
+          function test (t: TestQuery) {
+            for (const item of t.obj!.items) {
+              console.log(item.id, item.name, item.__typename);
+            }
+          }
+      `
+      );
+    });
+
+    it('#5422 - Error when interface doesnt have implemeting types', async () => {
+      const testSchema = buildSchema(/* GraphQL */ `
+        interface A {
+          a: String!
+        }
+
+        type Query {
+          test: A
+        }
+      `);
+
+      const query = parse(/* GraphQL */ `
+        query test {
+          test {
+            a
+          }
+        }
+      `);
+
+      const { content } = await plugin(
+        testSchema,
+        [{ location: '', document: query }],
+        {},
+        {
+          outputFile: 'graphql.ts',
+        }
+      );
+
+      expect(content).not.toContain(`Maybe<>`);
+      expect(content).toContain(`Maybe<never>`);
+    });
+
     it('#4389 - validate issues with interfaces', async () => {
       const testSchema = buildSchema(/* GraphQL */ `
         interface A {
@@ -4054,7 +4170,7 @@ describe('TypeScript Operations Plugin', () => {
         if (q.hotel) {
             const t1 = q.hotel.gpsPosition.lat
         }
-        
+
         if (q.transport) {
             const t2 = q.transport.id;
         }
@@ -4662,6 +4778,38 @@ function test(q: GetEntityBrandDataQuery): void {
       await validate(content, config);
     });
 
+    it('#5352 - Prevent array input coercion if arrayInputCoercion = false', async () => {
+      const schema = buildSchema(/* GraphQL */ `
+        type User {
+          id: ID!
+        }
+
+        type Query {
+          search(testArray: [String], requireString: [String]!, innerRequired: [String!]!): [User!]
+        }
+      `);
+
+      const ast = parse(/* GraphQL */ `
+        query user($testArray: [String], $requireString: [String]!, $innerRequired: [String!]!) {
+          search(testArray: $testArray, requireString: $requireString, innerRequired: $innerRequired) {
+            id
+          }
+        }
+      `);
+      const config = { preResolveTypes: true, arrayInputCoercion: false };
+      const { content } = await plugin(schema, [{ location: '', document: ast }], config, {
+        outputFile: 'graphql.ts',
+      });
+
+      expect(content).toBeSimilarStringTo(`
+      export type UserQueryVariables = Exact<{
+        testArray?: Maybe<Array<Maybe<Scalars['String']>>>;
+        requireString: Array<Maybe<Scalars['String']>>;
+        innerRequired: Array<Scalars['String']>;
+      }>;`);
+      await validate(content, config);
+    });
+
     it('#5263 - inline fragment spread on interface field results in incorrect types', async () => {
       const schema = buildSchema(/* GraphQL */ `
         interface Entity {
@@ -4761,60 +4909,11 @@ function test(q: GetEntityBrandDataQuery): void {
         showAddress: Scalars['Boolean'];
       }>;
 
-      
+
       export type UserQuery = { __typename?: 'Query', user: { __typename?: 'User', name: string, address?: Maybe<string> } };`);
     });
 
-    // it('objects with @skip, @include should pre resolve into optional', async () => {
-    //   const schema = buildSchema(/* GraphQL */ `
-    //     type Query {
-    //       user: User!
-    //     }
-
-    //     type User {
-    //       id: String!
-    //       name: String!
-    //       address: Address!
-    //     }
-
-    //     type Address {
-    //       city: String!
-    //     }
-    //   `);
-
-    //   const fragment = parse(/* GraphQL */ `
-    //     query user($showAddress: Boolean!, $showName: Boolean!) {
-    //       user {
-    //         id
-    //         name @include(if: $showName)
-    //         address @include(if: $showAddress) {
-    //           city
-    //         }
-    //       }
-    //     }
-    //   `);
-
-    //   const { content } = await plugin(
-    //     schema,
-    //     [{ location: '', document: fragment }],
-    //     {
-    //       preResolveTypes: true,
-    //     },
-    //     {
-    //       outputFile: 'graphql.ts',
-    //     }
-    //   );
-
-    //   expect(content).toBeSimilarStringTo(`
-    //   export type UserQueryVariables = Exact<{
-    //     showAddress: Scalars['Boolean'];
-    //     showName: Scalars['Boolean'];
-    //   }>;
-
-    //   export type UserQuery = { __typename?: 'Query', user: { __typename?: 'User', id: string, name?: Maybe<string>, address?: Maybe<{ __typename?: 'Address', city: string}> } };`);
-    // });
-
-    it('fileds with @skip, @include should make container resolve into MakeOptional type', async () => {
+    it('objects with @skip, @include should pre resolve into optional', async () => {
       const schema = buildSchema(/* GraphQL */ `
         type Query {
           user: User!
@@ -4823,14 +4922,77 @@ function test(q: GetEntityBrandDataQuery): void {
         type User {
           id: String!
           name: String!
+          address: Address!
+          friends: [User!]!
+          moreFriends: [User!]!
+        }
+
+        type Address {
+          city: String!
         }
       `);
 
       const fragment = parse(/* GraphQL */ `
-        query user($showName: Boolean!) {
+        query user($showAddress: Boolean!, $showName: Boolean!) {
           user {
             id
             name @include(if: $showName)
+            address @include(if: $showAddress) {
+              city
+            }
+            friends @include(if: $isFriendly) {
+              id
+            }
+          }
+        }
+      `);
+
+      const { content } = await plugin(
+        schema,
+        [{ location: '', document: fragment }],
+        {
+          preResolveTypes: true,
+        },
+        {
+          outputFile: 'graphql.ts',
+        }
+      );
+
+      expect(content).toBeSimilarStringTo(`
+      export type UserQueryVariables = Exact<{
+        showAddress: Scalars['Boolean'];
+        showName: Scalars['Boolean'];
+      }>;
+      export type UserQuery = { __typename?: 'Query', user: { __typename?: 'User', id: string, name?: Maybe<string>, address?: Maybe<{ __typename?: 'Address', city: string }>, friends?: Maybe<Array<{ __typename?: 'User', id: string }>> } };`);
+    });
+
+    it('fields with @skip, @include should make container resolve into MakeOptional type', async () => {
+      const schema = buildSchema(/* GraphQL */ `
+        type Query {
+          user: User!
+        }
+        type User {
+          id: String!
+          name: String!
+          address: Address!
+          friends: [User!]!
+        }
+        type Address {
+          city: String!
+        }
+      `);
+
+      const fragment = parse(/* GraphQL */ `
+        query user($showAddress: Boolean!, $showName: Boolean!) {
+          user {
+            id
+            name @include(if: $showName)
+            address @include(if: $showAddress) {
+              city
+            }
+            friends @include(if: $isFriendly) {
+              id
+            }
           }
         }
       `);
@@ -4846,15 +5008,23 @@ function test(q: GetEntityBrandDataQuery): void {
 
       expect(content).toBeSimilarStringTo(`
       export type UserQueryVariables = Exact<{
+        showAddress: Scalars['Boolean'];
         showName: Scalars['Boolean'];
       }>;
-  
-      
+
+
       export type UserQuery = (
         { __typename?: 'Query' }
         & { user: (
           { __typename?: 'User' }
           & MakeOptional<Pick<User, 'id' | 'name'>, 'name'>
+          & { address?: Maybe<(
+            { __typename?: 'Address' }
+            & Pick<Address, 'city'>
+          )>, friends?: Maybe<Array<(
+            { __typename?: 'User' }
+            & Pick<User, 'id'>
+          )>> }
         ) }
       );`);
     });
@@ -4895,7 +5065,7 @@ function test(q: GetEntityBrandDataQuery): void {
 
       expect(content).toBeSimilarStringTo(`
         export type UserQueryVariables = Exact<{ [key: string]: never; }>;
-        
+
         export type UserQuery = (
           { __typename?: 'Query' }
           & { user: (
